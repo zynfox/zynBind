@@ -100,6 +100,7 @@ class DateKeyBinder(QMainWindow):
                         self.first_instance = False  # Ignore first instance for pasting date
                     else:
                         self.paste_date()
+                    return True  # Block other handlers from processing
 
         def on_mouse_click(x, y, button, pressed):
             if self.toggle_listening_checkbox.isChecked() and pressed and str(button) == self.current_keybind:
@@ -107,9 +108,9 @@ class DateKeyBinder(QMainWindow):
                     self.first_instance = False  # Ignore first instance for pasting date
                 else:
                     self.paste_date()
+                return True  # Block other handlers from processing
 
         keyboard.on_press(on_triggered)
-
         mouse_listener = mouse.Listener(on_click=on_mouse_click)
         mouse_listener.start()
 
