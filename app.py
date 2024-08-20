@@ -1,28 +1,36 @@
 import sys
 from PySide6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QPushButton, QLabel, QLineEdit, QWidget, QHBoxLayout, QCheckBox
 from PySide6.QtCore import Qt
+import json
+import os
 import keyboard
 from pynput import mouse
 import datetime
 
 # Define the current version of your application
-__version__ = "0.2-beta"
+__version__ = "0.3-beta"
 
 class DateKeyBinder(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("zynBind - Mouse/Keyboard Key Binder")
-        self.setGeometry(100, 100, 300, 350)
+        self.setGeometry(100, 100, 300, 400)
 
         self.layout = QVBoxLayout()
 
-        # Create a horizontal layout for the switch and label
+        # Create a horizontal layout for the switches and labels
         self.switch_layout = QHBoxLayout()
 
         # Enable Keybind Listening Switch
         self.toggle_listening_checkbox = QCheckBox("Enable Keybind Listening", self)
         self.toggle_listening_checkbox.setChecked(True)
         self.switch_layout.addWidget(self.toggle_listening_checkbox)
+
+        # Add Space After Date Switch
+        self.add_space_checkbox = QCheckBox("Add Space After Date", self)
+        self.add_space_checkbox.setChecked(False)
+        self.add_space_checkbox.stateChanged.connect(self.update_keybind_with_space)
+        self.switch_layout.addWidget(self.add_space_checkbox)
 
         self.layout.addLayout(self.switch_layout)
 
@@ -31,6 +39,7 @@ class DateKeyBinder(QMainWindow):
 
         self.keybind_input = QLineEdit(self)
         self.keybind_input.setPlaceholderText("Enter keybind here...")
+        self.keybind_input.textChanged.connect(self.auto_save_keybind)  # Connect textChanged signal
         self.layout.addWidget(self.keybind_input)
 
         self.add_keybind_button = QPushButton("Add Keybind", self)
@@ -45,8 +54,7 @@ class DateKeyBinder(QMainWindow):
             "\nInstructions:\n"
             "1. Press 'Add Keybind' and then your desired key or mouse button.\n"
             "2. Use the switch at the top to enable or disable keybind listening.\n"
-            "3. You can include {SPACE} in your keybind for inserting spaces before or after the date.\n"
-            "   For example, if your keybind is 'F1{SPACE}', the date will paste with a space afterward.",
+            "3. Check 'Add Space After Date' to automatically append a space after the date.",
             self
         )
         self.layout.addWidget(self.instructions_label)
@@ -58,6 +66,22 @@ class DateKeyBinder(QMainWindow):
         self.current_keybind = None
         self.mouse_listener = None
         self.first_instance = True
+
+        # Load previous keybind on startup
+        self.load_keybind()
+
+    def load_keybind(self):
+        if os.path.exists('keybind_settings.json'):
+            with open('keybind_settings.json', 'r') as json_file:
+                settings = json.load(json_file)
+                self.current_keybind = settings.get('keybind', '')
+                if self.current_keybind:
+                    self.keybind_input.setText(self.current_keybind)
+                    self.status_label.setText(f"Status: Keybind set to {self.current_keybind}")
+                    if "{SPACE}" in self.current_keybind:
+                        self.add_space_checkbox.setChecked(True)
+                else:
+                    self.status_label.setText("Status: No keybind set")
 
     def add_keybind(self):
         self.status_label.setText("Status: Press a key or mouse button...")
@@ -71,9 +95,12 @@ class DateKeyBinder(QMainWindow):
             if not self.keybind_set:
                 key = e.name
                 self.current_keybind = key
-                self.keybind_input.setText(key)
-                self.status_label.setText(f"Status: Keybind set to {key}")
+                if self.add_space_checkbox.isChecked():
+                    self.current_keybind += "{SPACE}"
+                self.keybind_input.setText(self.current_keybind)
+                self.status_label.setText(f"Status: Keybind set to {self.current_keybind}")
                 self.keybind_set = True
+                self.save_keybind(self.current_keybind)
                 keyboard.unhook_all()
                 if self.mouse_listener:
                     self.mouse_listener.stop()
@@ -81,9 +108,12 @@ class DateKeyBinder(QMainWindow):
         def on_click(x, y, button, pressed):
             if pressed and not self.keybind_set:
                 self.current_keybind = str(button)
-                self.keybind_input.setText(str(button))
-                self.status_label.setText(f"Status: Keybind set to {button}")
+                if self.add_space_checkbox.isChecked():
+                    self.current_keybind += "{SPACE}"
+                self.keybind_input.setText(self.current_keybind)
+                self.status_label.setText(f"Status: Keybind set to {self.current_keybind}")
                 self.keybind_set = True
+                self.save_keybind(self.current_keybind)
                 if self.mouse_listener:
                     self.mouse_listener.stop()
 
@@ -92,10 +122,30 @@ class DateKeyBinder(QMainWindow):
         self.mouse_listener = mouse.Listener(on_click=on_click)
         self.mouse_listener.start()
 
+    def save_keybind(self, keybind):
+        settings = {'keybind': keybind}
+        with open('keybind_settings.json', 'w') as json_file:
+            json.dump(settings, json_file)
+
+    def auto_save_keybind(self):
+        keybind = self.keybind_input.text()
+        if keybind:  # Only save if there is a keybind
+            self.save_keybind(keybind)
+
+    def update_keybind_with_space(self):
+        keybind = self.keybind_input.text()
+        if self.add_space_checkbox.isChecked():
+            if "{SPACE}" not in keybind:
+                keybind += "{SPACE}"
+        else:
+            keybind = keybind.replace("{SPACE}", "")
+        self.keybind_input.setText(keybind)
+        self.save_keybind(keybind)
+
     def start_listening(self):
         def on_triggered(e):
             if self.toggle_listening_checkbox.isChecked():
-                if e.name == self.current_keybind:
+                if e.name == self.current_keybind.split('{')[0]:  # Check only the key part
                     if self.first_instance:
                         self.first_instance = False  # Ignore first instance for pasting date
                     else:
@@ -103,7 +153,7 @@ class DateKeyBinder(QMainWindow):
                     return True  # Block other handlers from processing
 
         def on_mouse_click(x, y, button, pressed):
-            if self.toggle_listening_checkbox.isChecked() and pressed and str(button) == self.current_keybind:
+            if self.toggle_listening_checkbox.isChecked() and pressed and str(button) == self.current_keybind.split('{')[0]:  # Check only the button part
                 if self.first_instance:
                     self.first_instance = False  # Ignore first instance for pasting date
                 else:
