@@ -1,6 +1,6 @@
 # Changelog
 
-Ability to save settings and reload them on application start.
+- Ability to save settings and reload them on application start.
 
 ## [0.3-beta] - 2024-08-20
 
