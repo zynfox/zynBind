@@ -6,7 +6,7 @@ from pynput import mouse
 import datetime
 
 # Define the current version of your application
-__version__ = "0.1"
+__version__ = "0.2-beta"
 
 class DateKeyBinder(QMainWindow):
     def __init__(self):
