@@ -15,7 +15,7 @@ zynBind is a desktop application built with PySide6 that allows you to set keybo
 
 1. **Install Dependencies:**
    Ensure you have the required Python packages installed. 
-   - I installed using conda: conda install PySlide6 keyboard pynput
+   - I installed using 'conda': conda install PySlide6 keyboard pynput
    - You can use `pip` to install them:
    ```bash
    pip install PySide6 keyboard pynput
