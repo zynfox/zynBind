@@ -8,7 +8,7 @@ from pynput import mouse
 import datetime
 
 # Define the current version of your application
-__version__ = "0.3-beta"
+__version__ = "0.4-beta"
 
 class DateKeyBinder(QMainWindow):
     def __init__(self):
@@ -67,12 +67,19 @@ class DateKeyBinder(QMainWindow):
         self.mouse_listener = None
         self.first_instance = True
 
+        # Determine the directory of the script
+        if getattr(sys, 'frozen', False):
+            self.script_dir = os.path.dirname(sys.executable)
+        else:
+            self.script_dir = os.path.dirname(os.path.abspath(__file__))
+
         # Load previous keybind on startup
         self.load_keybind()
 
     def load_keybind(self):
-        if os.path.exists('keybind_settings.json'):
-            with open('keybind_settings.json', 'r') as json_file:
+        json_path = os.path.join(self.script_dir, 'keybind_settings.json')
+        if os.path.exists(json_path):
+            with open(json_path, 'r') as json_file:
                 settings = json.load(json_file)
                 self.current_keybind = settings.get('keybind', '')
                 if self.current_keybind:
@@ -124,7 +131,8 @@ class DateKeyBinder(QMainWindow):
 
     def save_keybind(self, keybind):
         settings = {'keybind': keybind}
-        with open('keybind_settings.json', 'w') as json_file:
+        json_path = os.path.join(self.script_dir, 'keybind_settings.json')
+        with open(json_path, 'w') as json_file:
             json.dump(settings, json_file)
 
     def auto_save_keybind(self):
