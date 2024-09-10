@@ -1,6 +1,6 @@
 # 🗓️ zynBind
 
-**Version:** 0.3-beta
+**Version:** 0.4-beta
 
 zynBind is a desktop application built with PySide6 that allows you to set keyboard or mouse keybinds to automatically paste the current date. It supports saving and reloading settings, making it easy to configure and use.
 
@@ -8,7 +8,7 @@ zynBind is a desktop application built with PySide6 that allows you to set keybo
 
 - **🔄 Save & Reload Settings:** Save your keybind settings to a file and reload them automatically on startup.
 - **⌨️ Set Keybinds:** Bind any keyboard key or mouse button to paste the current date.
-- **📅 Date Formatting:** Customize how the date is pasted, with optional space before or after the date.
+- **📅 Date Formatting:** Customize how the date is pasted, with optional space after the date.
 - **🔧 Auto-Save Keybinds:** Automatically save keybinds as you set them.
 
 ## 🚀 Getting Started
