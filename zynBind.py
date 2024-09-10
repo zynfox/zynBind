@@ -3,14 +3,14 @@ import json
 import subprocess
 import sys
 import re
-from PySide6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QPushButton, QLabel, QLineEdit, QWidget, QHBoxLayout, QCheckBox, QGridLayout
+from PySide6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QPushButton, QLabel, QLineEdit, QWidget, QHBoxLayout, QGridLayout
 from PySide6.QtCore import Qt
 import keyboard
 from pynput import mouse, keyboard as pynput_keyboard
 from pynput.mouse import Button
-from PySide6.QtGui import QPixmap, QIcon
+from PySide6.QtGui import QPixmap
 
-__copyright__ = u'Copyright (c) 2024 zynfox.com'
+__copyright__ = u'Copyright (C) 2024 zynfox.com'
 __license__ = 'Proprietary'
 
 class DateKeyBinder(QMainWindow):
@@ -19,16 +19,18 @@ class DateKeyBinder(QMainWindow):
         self.setWindowTitle("zynBind - Mouse/Keyboard Key Binder")
         self.setMinimumSize(300, 400)
 
-        main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        # Main container layout
+        main_container = QVBoxLayout()
+        main_container.setContentsMargins(20, 0, 20, 0)  # Add padding on left and right
 
+        main_layout = QVBoxLayout()
         top_layout = QGridLayout()
         top_layout.setColumnStretch(0, 1)
         top_layout.setColumnStretch(1, 2)
         top_layout.setColumnStretch(2, 1)
 
         self.logo_label = QLabel()
-        self.original_logo_pixmap = QPixmap("C:\\Users\\zork\\Pictures\\zynBind-logo.png")
+        self.original_logo_pixmap = QPixmap("C:\\Users\\zork\\Projects\\Github\\zynfox\\zynBind\\img\\zynBind-logo.png")
         self.logo_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         top_layout.addWidget(self.logo_label, 0, 0)
 
@@ -43,10 +45,26 @@ class DateKeyBinder(QMainWindow):
         self.layout.addStretch()
 
         self.switch_layout = QHBoxLayout()
-        self.add_space_checkbox = QCheckBox("Add Space After Date", self)
-        self.add_space_checkbox.setChecked(False)
-        self.add_space_checkbox.stateChanged.connect(self.update_keybind_with_space)
-        self.switch_layout.addWidget(self.add_space_checkbox)
+        self.toggle_button = QPushButton("OFF", self)
+        self.toggle_button.setCheckable(True)
+        self.toggle_button.setStyleSheet("""
+            QPushButton {
+                background-color: #2d2c39;
+                color: white;
+                border: none;
+                border-radius: 10px;
+                padding: 5px;
+            }
+            QPushButton:checked {
+                background-color: #721cbd;
+            }
+        """)
+        self.toggle_button.clicked.connect(self.toggle_switch)
+        self.switch_layout.addWidget(self.toggle_button)
+
+        toggle_label = QLabel("Add Space After Date")
+        self.switch_layout.addWidget(toggle_label)
+
         self.layout.addLayout(self.switch_layout)
 
         self.instructions = QLabel("Press 'Add Keybind' and then your desired key or mouse button.")
@@ -55,35 +73,42 @@ class DateKeyBinder(QMainWindow):
         self.keybind_input = QLineEdit(self)
         self.keybind_input.setPlaceholderText("Enter keybind here...")
         self.keybind_input.textChanged.connect(self.auto_save_keybind)
+        self.keybind_input.setAlignment(Qt.AlignCenter)  # Center the keybind input
         self.layout.addWidget(self.keybind_input)
+
+        self.status_label = QLabel("Status: Waiting for keybind...")
+        self.layout.addWidget(self.status_label, alignment=Qt.AlignCenter)  # Center the status label
 
         self.add_keybind_button = QPushButton("Add Keybind", self)
         self.add_keybind_button.clicked.connect(self.add_keybind)
-        self.layout.addWidget(self.add_keybind_button)
-
-        self.status_label = QLabel("Status: Waiting for keybind...")
-        self.layout.addWidget(self.status_label)
+        self.layout.addWidget(self.add_keybind_button, alignment=Qt.AlignCenter)  # Center the button
 
         self.instructions_label = QLabel(
             "\nInstructions:\n"
             "1. Press 'Add Keybind' and then your desired key or mouse button.\n"
-            "2. Check 'Add Space After Date' to automatically append a space after the date."
+            "2. Toggle 'Add Space After Date' to automatically append a space after the date."
         )
         self.layout.addWidget(self.instructions_label)
 
+        # Button layout for Run and Close
+        button_layout = QHBoxLayout()
         self.run_button = QPushButton("Run", self)
         self.run_button.clicked.connect(self.save_and_run)
-        self.layout.addWidget(self.run_button)
+        button_layout.addWidget(self.run_button)
 
         self.close_button = QPushButton("Close", self)
         self.close_button.clicked.connect(self.close_app)
-        self.layout.addWidget(self.close_button)
+        button_layout.addWidget(self.close_button)
+
+        self.layout.addLayout(button_layout)  # Add button layout to main layout
 
         self.layout.addStretch()
         main_layout.addLayout(self.layout)
 
+        main_container.addLayout(main_layout)
+
         self.container = QWidget()
-        self.container.setLayout(main_layout)
+        self.container.setLayout(main_container)
         self.setCentralWidget(self.container)
 
         self.current_keybind = None
@@ -96,14 +121,23 @@ class DateKeyBinder(QMainWindow):
         self.ensure_autohotkey_setup()
 
         for button in self.findChildren(QPushButton):
+            button.setFixedWidth(150)  # Reduce button width
             button.clicked.connect(self.check_space_checkbox)
 
         self.scale_logo()
         self.resizeEvent = self.on_resize
 
+    def toggle_switch(self):
+        if self.toggle_button.isChecked():
+            self.toggle_button.setText("ON")
+        else:
+            self.toggle_button.setText("OFF")
+        self.update_keybind_with_space()
+        self.save_settings()
+
     def scale_logo(self, event=None):
-        available_width = self.width() * 0.3
-        available_height = self.height() * 0.2
+        available_width = self.width() * 0.5
+        available_height = self.height() * 0.3
         size = min(available_width, available_height)
         
         scaled_pixmap = self.original_logo_pixmap.scaled(
@@ -115,6 +149,11 @@ class DateKeyBinder(QMainWindow):
 
     def on_resize(self, event):
         self.scale_logo(event)
+        font_size = max(10, self.width() // 50)
+        self.setStyleSheet(f"font-size: {font_size}px;")
+        for button in self.findChildren(QPushButton):
+            button.setFixedWidth(max(150, self.width() // 4))
+        self.toggle_button.setFixedWidth(max(50, self.width() // 10))  # Adjust width for the toggle button
         super().resizeEvent(event)
 
     def get_app_dir(self):
@@ -124,7 +163,7 @@ class DateKeyBinder(QMainWindow):
             return os.path.dirname(os.path.abspath(__file__))
 
     def check_space_checkbox(self):
-        if self.add_space_checkbox.isChecked():
+        if self.toggle_button.isChecked():
             current_keybind = self.keybind_input.text()
             if "{SPACE}" not in current_keybind:
                 self.keybind_input.setText(current_keybind + "{SPACE}")
@@ -154,9 +193,14 @@ class DateKeyBinder(QMainWindow):
         if os.path.exists(settings_path):
             with open(settings_path, 'r') as f:
                 settings = json.load(f)
-            self.keybind_input.setText(settings.get('keybind', ''))
-            self.add_space_checkbox.setChecked(settings.get('add_space', False))
+            keybind = settings.get('keybind', '')
+            self.keybind_input.setText(keybind)
+            add_space = settings.get('add_space', False)
+            self.toggle_button.setChecked(add_space)
+            self.toggle_button.setText("ON" if add_space else "OFF")
             self.update_keybind_with_space()
+            if keybind:
+                self.status_label.setText(f"Status: Keybind set to {keybind}")
 
     def add_keybind(self):
         self.status_label.setText("Status: Press a key or mouse button...")
@@ -221,7 +265,7 @@ class DateKeyBinder(QMainWindow):
     def save_settings(self):
         settings = {
             'keybind': self.keybind_input.text(),
-            'add_space': self.add_space_checkbox.isChecked()
+            'add_space': self.toggle_button.isChecked()
         }
         settings_path = os.path.join(self.get_app_dir(), 'settings.json')
         with open(settings_path, 'w') as f:
@@ -234,7 +278,7 @@ class DateKeyBinder(QMainWindow):
 
     def update_keybind_with_space(self):
         keybind = self.keybind_input.text()
-        if self.add_space_checkbox.isChecked():
+        if self.toggle_button.isChecked():
             if "{SPACE}" not in keybind:
                 keybind += "{SPACE}"
         else:
