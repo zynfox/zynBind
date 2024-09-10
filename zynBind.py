@@ -11,6 +11,7 @@ from pynput.mouse import Button
 from PySide6.QtGui import QPixmap
 
 __copyright__ = u'Copyright (C) 2024 zynfox.com'
+__version__ = '0.4.1-beta'
 __license__ = 'Proprietary'
 
 class DateKeyBinder(QMainWindow):
@@ -34,7 +35,7 @@ class DateKeyBinder(QMainWindow):
         self.logo_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         top_layout.addWidget(self.logo_label, 0, 0)
 
-        copyright_label = QLabel(f"{__copyright__}\nLicense: {__license__}")
+        copyright_label = QLabel(f"{__copyright__}\nVersion: {__version__}\nLicense: {__license__}")
         copyright_label.setAlignment(Qt.AlignRight | Qt.AlignTop)
         copyright_label.setStyleSheet("color: gray; font-size: 10px;")
         top_layout.addWidget(copyright_label, 0, 2)
