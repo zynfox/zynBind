@@ -1,32 +1,52 @@
 import os
-import urllib.request
-import zipfile
 import json
 import subprocess
 import sys
 import re
-from PySide6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QPushButton, QLabel, QLineEdit, QWidget, QHBoxLayout, QCheckBox
+from PySide6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QPushButton, QLabel, QLineEdit, QWidget, QHBoxLayout, QCheckBox, QGridLayout
 from PySide6.QtCore import Qt
 import keyboard
-from pynput import mouse
+from pynput import mouse, keyboard as pynput_keyboard
+from pynput.mouse import Button
+from PySide6.QtGui import QPixmap, QIcon
+
+__copyright__ = u'Copyright (c) 2024 zynfox.com'
+__license__ = 'Proprietary'
 
 class DateKeyBinder(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("zynBind - Mouse/Keyboard Key Binder")
-        self.setGeometry(100, 100, 300, 400)
+        self.setMinimumSize(300, 400)
+
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
+
+        top_layout = QGridLayout()
+        top_layout.setColumnStretch(0, 1)
+        top_layout.setColumnStretch(1, 2)
+        top_layout.setColumnStretch(2, 1)
+
+        self.logo_label = QLabel()
+        self.original_logo_pixmap = QPixmap("C:\\Users\\zork\\Pictures\\zynBind-logo.png")
+        self.logo_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+        top_layout.addWidget(self.logo_label, 0, 0)
+
+        copyright_label = QLabel(f"{__copyright__}\nLicense: {__license__}")
+        copyright_label.setAlignment(Qt.AlignRight | Qt.AlignTop)
+        copyright_label.setStyleSheet("color: gray; font-size: 10px;")
+        top_layout.addWidget(copyright_label, 0, 2)
+
+        main_layout.addLayout(top_layout)
+
         self.layout = QVBoxLayout()
+        self.layout.addStretch()
 
         self.switch_layout = QHBoxLayout()
-        self.toggle_listening_checkbox = QCheckBox("Enable Keybind Listening", self)
-        self.toggle_listening_checkbox.setChecked(True)
-        self.switch_layout.addWidget(self.toggle_listening_checkbox)
-
         self.add_space_checkbox = QCheckBox("Add Space After Date", self)
         self.add_space_checkbox.setChecked(False)
         self.add_space_checkbox.stateChanged.connect(self.update_keybind_with_space)
         self.switch_layout.addWidget(self.add_space_checkbox)
-
         self.layout.addLayout(self.switch_layout)
 
         self.instructions = QLabel("Press 'Add Keybind' and then your desired key or mouse button.")
@@ -47,9 +67,7 @@ class DateKeyBinder(QMainWindow):
         self.instructions_label = QLabel(
             "\nInstructions:\n"
             "1. Press 'Add Keybind' and then your desired key or mouse button.\n"
-            "2. Use the switch at the top to enable or disable keybind listening.\n"
-            "3. Check 'Add Space After Date' to automatically append a space after the date.",
-            self
+            "2. Check 'Add Space After Date' to automatically append a space after the date."
         )
         self.layout.addWidget(self.instructions_label)
 
@@ -61,61 +79,66 @@ class DateKeyBinder(QMainWindow):
         self.close_button.clicked.connect(self.close_app)
         self.layout.addWidget(self.close_button)
 
+        self.layout.addStretch()
+        main_layout.addLayout(self.layout)
+
         self.container = QWidget()
-        self.container.setLayout(self.layout)
+        self.container.setLayout(main_layout)
         self.setCentralWidget(self.container)
 
         self.current_keybind = None
         self.mouse_listener = None
         self.first_instance = True
         self.autohotkey_process = None
+        self.ahk_script_running = False
 
-        self.script_dir = os.path.dirname(os.path.abspath(__file__))
-        self.paths_file = os.path.join(self.script_dir, 'autohotkey_paths.json')
-
-        # Load previous keybind on startup
-        self.load_keybind()
-
-        # Ensure AutoHotkey is set up
+        self.load_settings()
         self.ensure_autohotkey_setup()
 
-    def ensure_autohotkey_setup(self):
-        if not os.path.exists(self.paths_file):
-            self.download_and_setup_autohotkey()
+        for button in self.findChildren(QPushButton):
+            button.clicked.connect(self.check_space_checkbox)
 
-    def download_and_setup_autohotkey(self):
-        url = "https://www.autohotkey.com/download/2.0/AutoHotkey_2.0.18.zip"
-        zip_filename = "AutoHotkey_2.0.18.zip"
-        zip_path = os.path.join(self.script_dir, zip_filename)
-        extract_dir_name = os.path.splitext(zip_filename)[0]
-        extract_path = os.path.join(self.script_dir, extract_dir_name)
+        self.scale_logo()
+        self.resizeEvent = self.on_resize
 
-        print("Downloading AutoHotkey...")
-        urllib.request.urlretrieve(url, zip_path)
-        print("Download complete.")
+    def scale_logo(self, event=None):
+        available_width = self.width() * 0.3
+        available_height = self.height() * 0.2
+        size = min(available_width, available_height)
+        
+        scaled_pixmap = self.original_logo_pixmap.scaled(
+            size, size, 
+            Qt.KeepAspectRatio, 
+            Qt.SmoothTransformation
+        )
+        self.logo_label.setPixmap(scaled_pixmap)
 
-        print(f"Unzipping AutoHotkey to {extract_path}...")
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(extract_path)
-        print("Unzip complete.")
+    def on_resize(self, event):
+        self.scale_logo(event)
+        super().resizeEvent(event)
 
-        print(f"Deleting ZIP file {zip_path}...")
-        os.remove(zip_path)
-        print("ZIP file deleted.")
-
-        executable_path = self.find_executable_path(extract_path)
-        if executable_path:
-            self.save_paths(extract_path, executable_path)
+    def get_app_dir(self):
+        if getattr(sys, 'frozen', False):
+            return sys._MEIPASS
         else:
-            print("AutoHotkey executable not found. Please install it manually.")
+            return os.path.dirname(os.path.abspath(__file__))
 
-    def find_executable_path(self, extract_path):
-        print(f"Looking for executable in {extract_path}")
-        for root, dirs, files in os.walk(extract_path):
-            for file in files:
-                if file.lower() == 'autohotkey64.exe':
-                    return os.path.join(root, file)
-        return None
+    def check_space_checkbox(self):
+        if self.add_space_checkbox.isChecked():
+            current_keybind = self.keybind_input.text()
+            if "{SPACE}" not in current_keybind:
+                self.keybind_input.setText(current_keybind + "{SPACE}")
+
+    def ensure_autohotkey_setup(self):
+        self.paths_file = os.path.join(self.get_app_dir(), 'autohotkey_paths.json')
+        ahk_folder = os.path.join(self.get_app_dir(), 'AutoHotkey_2.0.18')
+        executable_path = os.path.join(ahk_folder, 'AutoHotkey64.exe')
+
+        if not os.path.exists(executable_path):
+            print("AutoHotkey executable not found. Please ensure the AutoHotkey_2.0.18 folder is in the same directory as the script.")
+            sys.exit(1)
+
+        self.save_paths(ahk_folder, executable_path)
 
     def save_paths(self, extract_path, executable_path):
         paths = {
@@ -126,67 +149,88 @@ class DateKeyBinder(QMainWindow):
             json.dump(paths, file)
         print(f"Paths saved to {self.paths_file}")
 
-    def load_keybind(self):
-        json_path = os.path.join(self.script_dir, 'keybind_settings.json')
-        if os.path.exists(json_path):
-            with open(json_path, 'r') as json_file:
-                settings = json.load(json_file)
-                self.current_keybind = settings.get('keybind', '')
-                if self.current_keybind:
-                    self.keybind_input.setText(self.current_keybind)
-                    self.status_label.setText(f"Status: Keybind set to {self.current_keybind}")
-                    if "{SPACE}" in self.current_keybind:
-                        self.add_space_checkbox.setChecked(True)
-                else:
-                    self.status_label.setText("Status: No keybind set")
+    def load_settings(self):
+        settings_path = os.path.join(self.get_app_dir(), 'settings.json')
+        if os.path.exists(settings_path):
+            with open(settings_path, 'r') as f:
+                settings = json.load(f)
+            self.keybind_input.setText(settings.get('keybind', ''))
+            self.add_space_checkbox.setChecked(settings.get('add_space', False))
+            self.update_keybind_with_space()
 
     def add_keybind(self):
         self.status_label.setText("Status: Press a key or mouse button...")
         self.keybind_input.clear()
         self.keybind_input.setFocus()
         self.keybind_set = False
-        self.first_instance = True
+        self.current_keybind = ""
+        self.pressed_keys = set()
 
         def on_key_event(e):
             if not self.keybind_set:
-                key = e.name
-                self.current_keybind = key
-                if self.add_space_checkbox.isChecked():
-                    self.current_keybind += "{SPACE}"
-                self.keybind_input.setText(self.current_keybind)
-                self.status_label.setText(f"Status: Keybind set to {self.current_keybind}")
-                self.keybind_set = True
-                keyboard.unhook_all()
-                if self.mouse_listener:
-                    self.mouse_listener.stop()
-                self.create_ahk_file()
-
-        def on_click(x, y, button, pressed):
-            if pressed and not self.keybind_set:
-                self.current_keybind = str(button)
-                if self.add_space_checkbox.isChecked():
-                    self.current_keybind += "{SPACE}"
-                self.keybind_input.setText(self.current_keybind)
-                self.status_label.setText(f"Status: Keybind set to {self.current_keybind}")
-                self.keybind_set = True
-                if self.mouse_listener:
-                    self.mouse_listener.stop()
-                self.create_ahk_file()
+                if e.event_type == keyboard.KEY_DOWN and e.name not in self.pressed_keys:
+                    if e.name in {'ctrl', 'alt', 'shift', 'win'}:
+                        self.current_keybind += e.name.upper() + "+"
+                        self.pressed_keys.add(e.name)
+                    else:
+                        self.current_keybind += e.name.upper()
+                        self.keybind_input.setText(self.current_keybind)
+                        self.status_label.setText(f"Status: Keybind set to {self.current_keybind}")
+                        self.keybind_set = True
+                        keyboard.unhook_all()
+                        if self.mouse_listener:
+                            self.mouse_listener.stop()
+                        self.check_space_checkbox()
+                        self.create_ahk_file()
 
         keyboard.hook(on_key_event)
-        self.mouse_listener = mouse.Listener(on_click=on_click)
+        self.mouse_listener = mouse.Listener(on_click=self.on_click)
         self.mouse_listener.start()
 
-    def save_keybind(self, keybind):
-        settings = {'keybind': keybind}
-        json_path = os.path.join(self.script_dir, 'keybind_settings.json')
-        with open(json_path, 'w') as json_file:
-            json.dump(settings, json_file)
+    def on_click(self, x, y, button, pressed):
+        if pressed and not self.keybind_set:
+            if button == Button.left:
+                self.current_keybind = "LButton"
+            elif button == Button.right:
+                self.current_keybind = "RButton"
+            elif button == Button.middle:
+                self.current_keybind = "MButton"
+            elif button == Button.x1:
+                self.current_keybind = "XButton1"
+            elif button == Button.x2:
+                self.current_keybind = "XButton2"
+            else:
+                self.current_keybind = str(button)
+            self.keybind_input.setText(self.current_keybind)
+            self.status_label.setText(f"Status: Keybind set to {self.current_keybind}")
+            self.keybind_set = True
+            if self.mouse_listener:
+                self.mouse_listener.stop()
+            self.check_space_checkbox()
+            self.create_ahk_file()
+
+    def get_modifier_key(self, key_name):
+        modifier_keys = {
+            'CTRL': '^',
+            'ALT': '!',
+            'SHIFT': '+',
+            'WIN': '#'
+        }
+        return modifier_keys.get(key_name, '')
+
+    def save_settings(self):
+        settings = {
+            'keybind': self.keybind_input.text(),
+            'add_space': self.add_space_checkbox.isChecked()
+        }
+        settings_path = os.path.join(self.get_app_dir(), 'settings.json')
+        with open(settings_path, 'w') as f:
+            json.dump(settings, f)
 
     def auto_save_keybind(self):
         keybind = self.keybind_input.text()
         if keybind:
-            self.save_keybind(keybind)
+            self.save_settings()
 
     def update_keybind_with_space(self):
         keybind = self.keybind_input.text()
@@ -196,12 +240,11 @@ class DateKeyBinder(QMainWindow):
         else:
             keybind = keybind.replace("{SPACE}", "")
         self.keybind_input.setText(keybind)
-        self.save_keybind(keybind)
+        self.save_settings()
 
     def create_ahk_file(self):
         keybind = self.keybind_input.text()
         keybind_clean = re.sub(r'Button\.x(\d+)', r'XButton\1', keybind)
-
         space_before = ""
         space_after = ""
         if "{SPACE}" in keybind_clean:
@@ -212,62 +255,64 @@ class DateKeyBinder(QMainWindow):
                 keybind_clean = keybind_clean.replace("{SPACE}", "")
                 space_after = " "
 
-        autohotkey_dir = self.script_dir
-        if os.path.exists(self.paths_file):
-            with open(self.paths_file, 'r') as json_file:
-                paths = json.load(json_file)
-                executable_path = paths.get('executable_path')
-                if executable_path:
-                    autohotkey_dir = os.path.dirname(executable_path)
+        ahk_keybind = ''
+        for part in keybind_clean.split('+'):
+            if part in {'CTRL', 'ALT', 'SHIFT', 'WIN'}:
+                ahk_keybind += self.get_modifier_key(part)
+            else:
+                ahk_keybind += part
 
         script_content = f"""
-        {keybind_clean}::
-        {{
-            ; Use FormatTime to get the current date in MM/dd/yyyy format
-            currentDate := FormatTime(A_Now, "MM/dd/yyyy")
-            ; Add a space after the formatted date
-            formattedDateWithSpace := currentDate "{space_after}"
-            ; Send formatted input
-            SendInput(formattedDateWithSpace)
-            return
-        }}
-        """
+{ahk_keybind}::
+{{
+    ; Use FormatTime to get the current date in MM/dd/yyyy format
+    currentDate := FormatTime(A_Now, "MM/dd/yyyy")
+    ; Add a space after the formatted date
+    formattedDateWithSpace := currentDate "{space_after}"
+    ; Send formatted input
+    SendInput(formattedDateWithSpace)
+    return
+}}
+"""
 
-        ahk_file_path = os.path.join(autohotkey_dir, 'paste_date.ahk')
-        with open(ahk_file_path, 'w') as file:
-            file.write(script_content)
-        print(f"AHK script created at {ahk_file_path}")
-        self.run_autohotkey_script(ahk_file_path)
+        json_path = os.path.join(self.get_app_dir(), 'autohotkey_paths.json')
+        with open(json_path, 'r') as json_file:
+            paths = json.load(json_file)
+        ahk_file_path = os.path.join(paths['extract_path'], 'keybind.ahk')
+        with open(ahk_file_path, 'w') as ahk_file:
+            ahk_file.write(script_content)
+        print(f"AHK file created: {ahk_file_path}")
+        self.run_ahk_script(ahk_file_path)
 
-    def run_autohotkey_script(self, ahk_file_path):
-        if os.path.exists(self.paths_file):
-            with open(self.paths_file, 'r') as json_file:
-                paths = json.load(json_file)
-                executable_path = paths.get('executable_path')
-                if executable_path:
-                    if self.autohotkey_process:
-                        self.autohotkey_process.terminate()
-                    self.autohotkey_process = subprocess.Popen([executable_path, ahk_file_path])
+    def run_ahk_script(self, ahk_file_path):
+        json_path = os.path.join(self.get_app_dir(), 'autohotkey_paths.json')
+        with open(json_path, 'r') as json_file:
+            paths = json.load(json_file)
+        autohotkey_executable = paths['executable_path']
+        if self.autohotkey_process:
+            self.autohotkey_process.terminate()
+        print(f"Running AHK script: {ahk_file_path}")
+        self.autohotkey_process = subprocess.Popen([autohotkey_executable, ahk_file_path])
+        self.ahk_script_running = True
+        print("AHK script running...")
 
     def save_and_run(self):
         keybind = self.keybind_input.text()
-        self.save_keybind(keybind)
-        self.create_ahk_file()
+        if keybind:
+            self.save_settings()
+            self.create_ahk_file()
+            self.status_label.setText(f"Status: Keybind '{keybind}' saved and script running.")
+        else:
+            self.status_label.setText("Status: No keybind to save.")
 
     def close_app(self):
-        # Terminate AutoHotkey process if running
-        if self.autohotkey_process and self.autohotkey_process.poll() is None:
-            self.autohotkey_process.terminate()  # Try to terminate gracefully
-            self.autohotkey_process.wait()  # Wait for process to terminate
-        self.close()  # Close the application window
+        self.save_settings()
+        if self.autohotkey_process:
+            self.autohotkey_process.terminate()
+        self.close()
 
-    def closeEvent(self, event):
-        """Override the closeEvent to ensure AutoHotkey is terminated."""
-        self.close_app()
-        event.accept()
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = DateKeyBinder()
-    window.show()
+    main_window = DateKeyBinder()
+    main_window.show()
     sys.exit(app.exec())
